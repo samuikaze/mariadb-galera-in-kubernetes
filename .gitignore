@@ -1,0 +1,2 @@
+!/.kubernetes/*.yaml
+/.kubernetes/*.production.yaml
