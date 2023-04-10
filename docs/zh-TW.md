@@ -66,16 +66,63 @@
 
     > 這將會安裝 MariaDB Galera 至 `database-system` 命名空間下，你可以安裝在其它的命名空間下
 
-    > 修改 `<YOUR_ROOT_PASSWORD>` 為你想要的 root 密碼
+    > 修改 `<YOUR_ROOT_PASSWORD>` 與 `<YOUR_RECOVERY_PASSWORD>` 為你想要的密碼
 
     ```console
     $ helm repo add bitnami https://charts.bitnami.com/bitnami
     $ helm install mariadb-galera bitnami/mariadb-galera \
         --namespace database-system --create-namespace \
-        --set rootUser.password=<YOUR_ROOT_PASSWORD>
+        --set rootUser.password=<YOUR_ROOT_PASSWORD> \
+        --set galera.mariabackup.password=<YOUR_RECOVERY_PASSWORD>
     ```
 
 4. 等待所有的節點起來後，你就可以 Port forward MariaDB Galera service 後進行連線
+
+## 升級版本或重新啟動
+
+若沒有特別設定，重新啟動系統後會導致整個資料庫叢集無法啟動，所以務必確定有執行以下動作
+
+> 執行以下動作前**請先確定是否仍記得目前的 root 密碼與備份密碼**，如忘記請先想辦法取回這兩組密碼，以免叢集無法正常啟動
+
+> root 密碼與備份密碼都**不可以留空**，只要有一方的密碼未設定，這個資料庫叢集就沒救了
+
+1. 移除 MariaDB Galera 的 Helm charts
+2. 備份資料庫叢集的資料夾
+    > 此步驟至關重要，特別是當這些資料庫已經在正式環境服務過後，這些資料更是不能遺失，請務必做好備份動作，以免所有的資料遺失
+
+    > 備份方法不限，最簡單的方式就是直接複製到另外一個資料夾進行備份，畢竟重新啟動系統勢必是為了安裝系統更新，只要不會讓資料遺失的備份方式都 OK
+3. 重新啟動系統
+4. 待所有的 Pod 都啟動後以下面的指令重新啟動 MariaDB Galera 資料庫叢集
+
+    > `<YOUR_ORIGINAL_ROOT_PASSWORD>` 填原本的 root 密碼，`<YOUR_ORIGINAL_BACKUP_PASSWORD>` 則填原本的備份密碼
+
+    > `<NODE_NUMBER>` 可以自行決定要從哪台節點進行啟動，第一台節點為 0，以此類推
+
+    > 此指令的目標命名空間為 `database-system`，若非安裝在此命名空間，請自行修改該值
+
+    ```console
+    $ helm install mariadb-galera bitnami/mariadb-galera \
+        --set rootUser.password=<YOUR_ORIGINAL_ROOT_PASSWORD> \
+        --set galera.mariabackup.password=<YOUR_ORIGINAL_BACKUP_PASSWORD> \
+        --set galera.bootstrap.forceBootstrap=true \
+        --set galera.bootstrap.bootstrapFromNode=<NODE_NUMBER> \
+        --set podManagementPolicy=Parallel \
+        --namespace database-system \
+        --create-namespace
+    ```
+
+5. 待所有 Pod 都正常啟動後，執行以下的指令移除強制啟動
+
+    ```console
+    $ helm upgrade my-release my-repo/mariadb-galera \
+        --set rootUser.password=<YOUR_ORIGINAL_ROOT_PASSWORD> \
+        --set galera.mariabackup.password=<YOUR_ORIGINAL_BACKUP_PASSWORD> \
+        --set podManagementPolicy=Parallel \
+        --namespace database-system \
+        --create-namespace
+    ```
+
+6. 完成
 
 ## 參考資料
 
