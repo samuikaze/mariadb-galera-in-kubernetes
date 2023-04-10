@@ -44,7 +44,7 @@
 2. 套用 SELinux 策略
 
     ```console
-    # semodule -i allowregistrypolicy.pp
+    # semodule -i allowmariadbpolicy.pp
     ```
 
     > 若你非建立資料夾在家目錄下，請依據以下步驟修改 te 檔以符合你的需求
