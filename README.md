@@ -1,5 +1,7 @@
 # Install MariaDB Galera Cluster in Kubernetes Cluster
 
+> [中文說明](./docs/zh-TW.md)
+
 This repository will show you how to install MariaDB Galera cluster in Kubernetes cluster.
 
 ## Prepare for installation
