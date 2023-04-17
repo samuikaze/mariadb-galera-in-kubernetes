@@ -124,6 +124,96 @@
 
 6. 完成
 
+## 節點重啟後復原狀態
+
+可能因為某些原因導致 K8s 的節點重啟，此時 MariaDB Galera 叢集必定起不來，必須依照下列步驟復原其狀態
+
+> 在這個範例中我們假設 MariaDB Galera 叢集被安裝在 `mariadb-galera-clusters` 命名空間中
+
+1. 取得所有 PVC 名稱
+
+    ```console
+    $ kubectl get pvc --namespace mariadb-galera-clusters
+    ```
+
+2. 執行以下指令以找出哪個 MaraiDB Galera 節點有 `safe_to_bootstrap=1` 設定值
+
+    > 每個 PVC 名稱都要執行一次
+
+    ```console
+    kubectl run -i --rm --tty volpod --overrides='
+    {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": "volpod"
+        },
+        "spec": {
+            "containers": [{
+                "command": [
+                    "cat",
+                    "/mnt/data/grastate.dat"
+                ],
+                "image": "bitnami/minideb",
+                "name": "mycontainer",
+                "volumeMounts": [{
+                    "mountPath": "/mnt",
+                    "name": "galeradata"
+                }]
+            }],
+            "restartPolicy": "Never",
+            "volumes": [{
+                "name": "galeradata",
+                "persistentVolumeClaim": {
+                    "claimName": "<YOUR PVC NAME>"
+                }
+            }]
+        }
+    }' --image="bitnami/minideb" --namespace mariadb-galera-clusters
+    ```
+
+3. 這邊你會有兩種狀況:
+
+    > 在這個範例中我們假設你的 Helm repo 名稱是 `bitnami` 且安裝的 chart 名稱為 `mariadb-galera`
+    - 只有一個節點有 `safe_to_bootstrap=1` 設定值
+        你可以利用該節點重啟整個叢集
+
+        ```console
+        $ helm install mariadb-galera bitnami/mariadb-galera \
+            --namespace mariadb-galera-clusters \
+            --set rootUser.password=<YOUR_DB_ROOT_PASSWORD> \
+            --set galera.mariabackup.password=<YOUR_DB_BACKUP_PASSWORD> \
+            --set galera.bootstrap.forceBootstrap=true \
+            --set galera.bootstrap.bootstrapFromNode=<THE_NODE_NUMBER_YOU_GET_ABOVE> \
+            --set podManagementPolicy=Parallel
+        ```
+
+    - 所有節點都為 `safe_to_bootstrap=0`
+        你必須指定一個節點重啟整個叢集，在這個範例我們使用第 0 個節點，你可以自行選擇
+
+        ```console
+        $ helm install mariadb-galera bitnami/mariadb-galera \
+            --namespace mariadb-galera-clusters \
+            --set rootUser.password=<YOUR_DB_ROOT_PASSWORD> \
+            --set galera.mariabackup.password=<YOUR_DB_BACKUP_PASSWORD> \
+            --set galera.bootstrap.forceBootstrap=true \
+            --set galera.bootstrap.bootstrapFromNode=0 \
+            --set galera.bootstrap.forceSafeToBootstrap=true \
+            --set podManagementPolicy=Parallel
+        ```
+
+4. 待所有的節點都起來後，必須將強制啟動的設定移除
+
+    ```console
+    helm upgrade mariadb-galera bitnami/mariadb-galera \
+        --namespace mariadb-galera-clusters \
+        --set rootUser.password=<YOUR_DB_ROOT_PASSWORD> \
+        --set galera.mariabackup.password=<YOUR_DB_BACKUP_PASSWORD> \
+        --set podManagementPolicy=Parallel
+    ```
+
+5. 完成
+
 ## 參考資料
 
 - [MariaDB Galera packaged by Bitnami](https://github.com/bitnami/charts/tree/main/bitnami/mariadb-galera)

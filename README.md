@@ -125,6 +125,95 @@ If you don't follow the steps below, the cluster will not be able to start. So p
 
 6. Done.
 
+## Recovery from node restart
+
+Due to some reason, your node has been restarted, Mariadb Galera cluster will be down, you need to follow the steps below to recovery your cluster
+
+> In this case we install our cluster in database-system namespace.
+
+1. Get all pvc names
+
+    ```console
+    $ kubectl get pvc --namespace database-system
+    ```
+
+2. Issue the command to verify which node has `safe_to_bootstrap=1`
+
+    > You need to run this command for each pvc name.
+
+    ```console
+    kubectl run -i --rm --tty volpod --overrides='
+    {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": "volpod"
+        },
+        "spec": {
+            "containers": [{
+                "command": [
+                    "cat",
+                    "/mnt/data/grastate.dat"
+                ],
+                "image": "bitnami/minideb",
+                "name": "mycontainer",
+                "volumeMounts": [{
+                    "mountPath": "/mnt",
+                    "name": "galeradata"
+                }]
+            }],
+            "restartPolicy": "Never",
+            "volumes": [{
+                "name": "galeradata",
+                "persistentVolumeClaim": {
+                    "claimName": "<YOUR PVC NAME>"
+                }
+            }]
+        }
+    }' --image="bitnami/minideb" --namespace database-system
+    ```
+
+3. Then here you have two scenarios:
+    > In this case, our repo name is `bitnami` and chart name is `mariadb-galera`
+    - Only one node with `safe_to_bootstrap=1`
+        You can restart your cluster from that node by issuing the command below:
+
+        ```console
+        $ helm install mariadb-galera bitnami/mariadb-galera \
+            --namespace database-system \
+            --set rootUser.password=<YOUR_DB_ROOT_PASSWORD> \
+            --set galera.mariabackup.password=<YOUR_DB_BACKUP_PASSWORD> \
+            --set galera.bootstrap.forceBootstrap=true \
+            --set galera.bootstrap.bootstrapFromNode=<THE_NODE_NUMBER_YOU_GET_ABOVE> \
+            --set podManagementPolicy=Parallel
+        ```
+
+    - All the nodes with `safe_to_bootstrap=0`
+        You need to pick one node to restart the cluster, in this case we choose node 0, you can choose what node you preferred to use.
+
+        ```console
+        $ helm install mariadb-galera bitnami/mariadb-galera \
+            --namespace database-system \
+            --set rootUser.password=<YOUR_DB_ROOT_PASSWORD> \
+            --set galera.mariabackup.password=<YOUR_DB_BACKUP_PASSWORD> \
+            --set galera.bootstrap.forceBootstrap=true \
+            --set galera.bootstrap.bootstrapFromNode=0 \
+            --set galera.bootstrap.forceSafeToBootstrap=true \
+            --set podManagementPolicy=Parallel
+        ```
+
+4. Wait until all nodes and pods are up, you need to remove force bootstraping
+
+    ```console
+    helm upgrade mariadb-galera bitnami/mariadb-galera \
+        --namespace database-system \
+        --set rootUser.password=<YOUR_DB_ROOT_PASSWORD> \
+        --set galera.mariabackup.password=<YOUR_DB_BACKUP_PASSWORD> \
+        --set podManagementPolicy=Parallel
+    ```
+
+5. Done.
+
 ## Reference
 
 - [MariaDB Galera packaged by Bitnami](https://github.com/bitnami/charts/tree/main/bitnami/mariadb-galera)
